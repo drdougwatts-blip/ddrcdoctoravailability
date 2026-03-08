@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDRC Doctor Availability</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --danger: #dc2626;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --border: #e2e8f0;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+  }
+
+  .header {
+    background: var(--primary);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .header h1 { font-size: 18px; font-weight: 600; }
+
+  .back-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* Landing Page */
+  .landing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100dvh - 64px);
+    padding: 24px;
+    gap: 20px;
+  }
+
+  .landing-title {
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .landing-sub {
+    color: var(--text-light);
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .landing-btn {
+    width: 100%;
+    max-width: 320px;
+    padding: 20px 24px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: transform 0.1s, box-shadow 0.2s;
+  }
+
+  .landing-btn:active { transform: scale(0.98); }
+
+  .landing-btn.doctor {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+  }
+
+  .landing-btn.planning {
+    background: var(--card);
+    color: var(--text);
+    border: 2px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  .landing-btn .icon { font-size: 28px; }
+
+  /* Views */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .container { padding: 16px; max-width: 800px; margin: 0 auto; }
+
+  /* Doctor Selector */
+  .doctor-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .doctor-chip {
+    padding: 12px 8px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    background: var(--card);
+    transition: all 0.15s;
+  }
+
+  .doctor-chip:hover { border-color: var(--primary); }
+  .doctor-chip.selected {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  /* Month Navigation */
+  .month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  .month-nav button {
+    background: none;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--text);
+  }
+
+  .month-nav button:hover { background: var(--bg); }
+  .month-nav span { font-weight: 600; font-size: 17px; }
+
+  /* Quick Actions */
+  .quick-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .quick-btn {
+    flex: 1;
+    min-width: 90px;
+    padding: 10px 12px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .quick-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .quick-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Calendar Grid */
+  .cal-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .cal-header span {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    padding: 6px 0;
+  }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .cal-day {
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--text);
+    border: 2px solid var(--border);
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cal-day.empty { visibility: hidden; }
+  .cal-day.available { background: var(--success); color: white; border-color: var(--success); }
+  .cal-day.today { box-shadow: inset 0 0 0 2px var(--primary); }
+  .cal-day:not(.empty):hover { transform: scale(1.05); }
+
+  /* Section Labels */
+  .section-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+
+  /* Planning View */
+  .planning-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+  }
+
+  .planning-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 600px;
+    background: var(--card);
+  }
+
+  .planning-table th, .planning-table td {
+    padding: 8px 6px;
+    text-align: center;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .planning-table thead th {
+    background: var(--primary);
+    color: white;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .planning-table thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+  }
+
+  .planning-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--bg);
+    font-weight: 600;
+    z-index: 1;
+  }
+
+  .planning-table .tick { color: var(--success); font-weight: 700; font-size: 16px; }
+
+  .planning-table .total-row td {
+    font-weight: 700;
+    background: #f1f5f9;
+  }
+
+  .planning-table .warn-zero { background: #fecaca; color: var(--danger); font-weight: 700; }
+  .planning-table .warn-one { background: #fef3c7; color: #92400e; font-weight: 700; }
+
+  .planning-table .weekend-col { background: #f1f5f9; }
+  .planning-table .weekend-header { background: var(--primary-dark); }
+
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .export-btn:hover { background: var(--primary-dark); }
+
+  /* Status bar */
+  .status-bar {
+    padding: 10px 16px;
+    background: #dbeafe;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--primary-dark);
+    font-weight: 500;
+    text-align: center;
+  }
+
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-light);
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-light);
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+
+  .legend-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <button class="back-btn" id="backBtn" style="display:none" onclick="showLanding()">&#8592;</button>
+  <h1 id="headerTitle">DDRC Availability</h1>
+</div>
+
+<!-- Landing View -->
+<div class="view active" id="landingView">
+  <div class="landing">
+    <div class="landing-title">DDRC Availability</div>
+    <div class="landing-sub">Mark your availability and plan team cover</div>
+    <button class="landing-btn doctor" onclick="showDoctorSelect()">
+      <span class="icon">&#128100;</span> I'm a Doctor
+    </button>
+    <button class="landing-btn planning" onclick="showPlanning()">
+      <span class="icon">&#128197;</span> Planning View
+    </button>
+  </div>
+</div>
+
+<!-- Doctor Select View -->
+<div class="view" id="doctorSelectView">
+  <div class="container">
+    <p class="section-label">Select your initials</p>
+    <div class="doctor-grid" id="doctorGrid"></div>
+  </div>
+</div>
+
+<!-- Doctor Calendar View -->
+<div class="view" id="doctorCalView">
+  <div class="container">
+    <div class="status-bar" id="statusBar"></div>
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">&#8592;</button>
+      <span id="monthLabel"></span>
+      <button onclick="changeMonth(1)">&#8594;</button>
+    </div>
+    <div class="quick-actions">
+      <button class="quick-btn" onclick="setAllWeekdays()">All Weekdays</button>
+      <button class="quick-btn" onclick="setAllDays()">All Days</button>
+      <button class="quick-btn danger" onclick="clearAll()">Clear All</button>
+    </div>
+    <div class="cal-header" id="calHeader"></div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+</div>
+
+<!-- Planning View -->
+<div class="view" id="planningView">
+  <div class="container">
+    <div class="month-nav">
+      <button onclick="changePlanMonth(-1)">&#8592;</button>
+      <span id="planMonthLabel"></span>
+      <button onclick="changePlanMonth(1)">&#8594;</button>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#16a34a"></div> Available</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fef3c7;border:1px solid #fde68a"></div> 1 doctor</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fecaca;border:1px solid #fca5a5"></div> 0 doctors</div>
+    </div>
+    <div id="planningContent"><div class="loading"><div class="spinner"></div>Loading data...</div></div>
+    <button class="export-btn" onclick="exportCSV()">&#128190; Export CSV</button>
+  </div>
+</div>
+
+<script type="module">
+  // ── Firebase Setup ──
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs }
+    from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBjL6GAz-FZxsFnw9cx4S7Ee4tN7XZ5ks0",
+    authDomain: "oncalldoctoravailability.firebaseapp.com",
+    projectId: "oncalldoctoravailability",
+    storageBucket: "oncalldoctoravailability.firebasestorage.app",
+    messagingSenderId: "679295814891",
+    appId: "1:679295814891:web:73120343f0a0c4050882ae",
+    measurementId: "G-W49YFCV93F"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ── State ──
+  const DOCTORS = ["SD","JF","LF","CH","RJ","DS","RS","CW","DW","FW","JWh","SW"];
+  let currentDoctor = null;
+  let calYear, calMonth; // 0-indexed month
+  let planYear, planMonth;
+  let availability = {}; // { "YYYY-MM-DD": true, ... } for current doctor
+
+  // ── Navigation ──
+  function showView(id, title, showBack) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.getElementById('headerTitle').textContent = title;
+    document.getElementById('backBtn').style.display = showBack ? '' : 'none';
+  }
+
+  window.showLanding = () => showView('landingView', 'DDRC Availability', false);
+
+  window.showDoctorSelect = () => {
+    renderDoctorGrid();
+    showView('doctorSelectView', 'Select Your Initials', true);
+  };
+
+  window.showPlanning = () => {
+    const now = new Date();
+    planYear = now.getFullYear();
+    planMonth = now.getMonth();
+    showView('planningView', 'Planning View', true);
+    loadPlanningData();
+  };
+
+  // ── Doctor Grid ──
+  function renderDoctorGrid() {
+    const grid = document.getElementById('doctorGrid');
+    grid.innerHTML = '';
+    DOCTORS.forEach(d => {
+      const chip = document.createElement('div');
+      chip.className = 'doctor-chip';
+      chip.textContent = d;
+      chip.onclick = () => selectDoctor(d);
+      grid.appendChild(chip);
+    });
+  }
+
+  async function selectDoctor(initials) {
+    currentDoctor = initials;
+    const now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth();
+    await loadDoctorData();
+    showView('doctorCalView', initials + ' — Availability', true);
+    renderCalendar();
+  }
+
+  // ── Firestore Helpers ──
+  function docRef(doctor, year, month) {
+    const key = `${doctor}_${year}-${String(month + 1).padStart(2, '0')}`;
+    return doc(db, 'availability', key);
+  }
+
+  async function loadDoctorData() {
+    try {
+      const ref = docRef(currentDoctor, calYear, calMonth);
+      const snap = await getDoc(ref);
+      availability = snap.exists() ? snap.data().dates || {} : {};
+    } catch (e) {
+      console.error('Load error:', e);
+      availability = {};
+    }
+  }
+
+  async function saveDoctorData() {
+    try {
+      const ref = docRef(currentDoctor, calYear, calMonth);
+      await setDoc(ref, { doctor: currentDoctor, year: calYear, month: calMonth, dates: availability });
+    } catch (e) {
+      console.error('Save error:', e);
+    }
+  }
+
+  // ── Calendar Rendering ──
+  function renderCalendar() {
+    const header = document.getElementById('calHeader');
+    header.innerHTML = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+      .map(d => `<span>${d}</span>`).join('');
+
+    const label = document.getElementById('monthLabel');
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    label.textContent = `${monthNames[calMonth]} ${calYear}`;
+
+    const statusBar = document.getElementById('statusBar');
+    const count = Object.values(availability).filter(Boolean).length;
+    statusBar.textContent = `${currentDoctor}: ${count} day${count !== 1 ? 's' : ''} marked available`;
+
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+
+    const firstDay = new Date(calYear, calMonth, 1);
+    let startDow = firstDay.getDay(); // 0=Sun
+    startDow = startDow === 0 ? 6 : startDow - 1; // Convert to Mon=0
+
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const today = new Date();
+
+    for (let i = 0; i < startDow; i++) {
+      const empty = document.createElement('button');
+      empty.className = 'cal-day empty';
+      grid.appendChild(empty);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const btn = document.createElement('button');
+      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      btn.className = 'cal-day';
+      if (availability[dateStr]) btn.classList.add('available');
+      if (today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === d) {
+        btn.classList.add('today');
+      }
+      btn.textContent = d;
+      btn.onclick = () => toggleDay(dateStr, btn);
+      grid.appendChild(btn);
+    }
+  }
+
+  async function toggleDay(dateStr, btn) {
+    if (availability[dateStr]) {
+      delete availability[dateStr];
+      btn.classList.remove('available');
+    } else {
+      availability[dateStr] = true;
+      btn.classList.add('available');
+    }
+    updateStatusCount();
+    await saveDoctorData();
+  }
+
+  function updateStatusCount() {
+    const count = Object.values(availability).filter(Boolean).length;
+    document.getElementById('statusBar').textContent = `${currentDoctor}: ${count} day${count !== 1 ? 's' : ''} marked available`;
+  }
+
+  // ── Month Nav ──
+  window.changeMonth = async (dir) => {
+    calMonth += dir;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    await loadDoctorData();
+    renderCalendar();
+  };
+
+  window.changePlanMonth = async (dir) => {
+    planMonth += dir;
+    if (planMonth < 0) { planMonth = 11; planYear--; }
+    if (planMonth > 11) { planMonth = 0; planYear++; }
+    await loadPlanningData();
+  };
+
+  // ── Quick Actions ──
+  window.setAllWeekdays = async () => {
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    availability = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(calYear, calMonth, d).getDay();
+      if (dow >= 1 && dow <= 5) {
+        const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        availability[dateStr] = true;
+      }
+    }
+    await saveDoctorData();
+    renderCalendar();
+  };
+
+  window.setAllDays = async () => {
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    availability = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      availability[dateStr] = true;
+    }
+    await saveDoctorData();
+    renderCalendar();
+  };
+
+  window.clearAll = async () => {
+    availability = {};
+    await saveDoctorData();
+    renderCalendar();
+  };
+
+  // ── Planning View ──
+  async function loadPlanningData() {
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    document.getElementById('planMonthLabel').textContent = `${monthNames[planMonth]} ${planYear}`;
+
+    const content = document.getElementById('planningContent');
+    content.innerHTML = '<div class="loading"><div class="spinner"></div>Loading data...</div>';
+
+    const monthKey = `${planYear}-${String(planMonth + 1).padStart(2, '0')}`;
+    const daysInMonth = new Date(planYear, planMonth + 1, 0).getDate();
+
+    // Load all doctor data for this month
+    const allData = {};
+    try {
+      const snap = await getDocs(collection(db, 'availability'));
+      snap.forEach(d => {
+        const data = d.data();
+        if (d.id.endsWith(monthKey)) {
+          allData[data.doctor] = data.dates || {};
+        }
+      });
+    } catch (e) {
+      console.error('Planning load error:', e);
+    }
+
+    // Build table
+    let html = '<div class="planning-table-wrap"><table class="planning-table"><thead><tr><th>Doctor</th>';
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(planYear, planMonth, d).getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      html += `<th class="${isWeekend ? 'weekend-header' : ''}">${d}<br><small>${dayNames[dow]}</small></th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    // Doctor rows
+    DOCTORS.forEach(doc => {
+      html += `<tr><td>${doc}</td>`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${planYear}-${String(planMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dow = new Date(planYear, planMonth, d).getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const avail = allData[doc] && allData[doc][dateStr];
+        html += `<td class="${isWeekend ? 'weekend-col' : ''}">${avail ? '<span class="tick">&#10003;</span>' : ''}</td>`;
+      }
+      html += '</tr>';
+    });
+
+    // Total row
+    html += '<tr class="total-row"><td>Total</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${planYear}-${String(planMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      let count = 0;
+      DOCTORS.forEach(doc => { if (allData[doc] && allData[doc][dateStr]) count++; });
+      let cls = '';
+      if (count === 0) cls = 'warn-zero';
+      else if (count === 1) cls = 'warn-one';
+      html += `<td class="${cls}">${count}</td>`;
+    }
+    html += '</tr></tbody></table></div>';
+
+    content.innerHTML = html;
+
+    // Store for CSV export
+    window._planData = { allData, daysInMonth, planYear, planMonth };
+  }
+
+  // ── CSV Export ──
+  window.exportCSV = () => {
+    const { allData, daysInMonth, planYear, planMonth } = window._planData || {};
+    if (!daysInMonth) return;
+
+    const monthKey = `${planYear}-${String(planMonth + 1).padStart(2, '0')}`;
+    let csv = 'Doctor';
+    for (let d = 1; d <= daysInMonth; d++) csv += `,${d}`;
+    csv += ',Total\n';
+
+    DOCTORS.forEach(doc => {
+      csv += doc;
+      let total = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+        const avail = allData[doc] && allData[doc][dateStr] ? 1 : 0;
+        total += avail;
+        csv += `,${avail ? 'Y' : ''}`;
+      }
+      csv += `,${total}\n`;
+    });
+
+    // Totals row
+    csv += 'Total';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+      let count = 0;
+      DOCTORS.forEach(doc => { if (allData[doc] && allData[doc][dateStr]) count++; });
+      csv += `,${count}`;
+    }
+    csv += '\n';
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    a.download = `ddrc-availability-${monthNames[planMonth]}-${planYear}.csv`;
+    a.click();
+  };
+</script>
+</body>
+</html>
