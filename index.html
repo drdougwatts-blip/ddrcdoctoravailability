@@ -396,6 +396,20 @@
 
   .planning-table .weekend-col { background: #f1f5f9; }
   .planning-table .weekend-header { background: var(--primary-dark); }
+  .planning-table .bank-hol-col { background: #ede9fe; }
+  .planning-table .bank-hol-header { background: #7c3aed; }
+
+  /* Bank holiday on doctor calendar */
+  .cal-day.bank-holiday { border-color: #a78bfa; background: #ede9fe; color: #5b21b6; }
+  .cal-day.bank-holiday.available { background: #7c3aed; border-color: #7c3aed; color: white; }
+  .bank-hol-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: #7c3aed;
+    text-align: center;
+    padding: 2px 0 0;
+    line-height: 1;
+  }
 
   .export-btn {
     display: inline-flex;
@@ -536,6 +550,7 @@
       <div class="legend-item"><div class="legend-swatch" style="background:#16a34a"></div> Available</div>
       <div class="legend-item"><div class="legend-swatch" style="background:#fef3c7;border:1px solid #fde68a"></div> 1 doctor</div>
       <div class="legend-item"><div class="legend-swatch" style="background:#fecaca;border:1px solid #fca5a5"></div> 0 doctors</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#ede9fe;border:1px solid #c4b5fd"></div> Bank holiday</div>
     </div>
     <div id="planningContent"><div class="loading"><div class="spinner"></div>Loading data...</div></div>
     <button class="export-btn" onclick="exportCSV()">&#128190; Export CSV</button>
@@ -560,6 +575,84 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+
+  // ── English Bank Holidays ──
+  function getEaster(year) {
+    // Anonymous Gregorian algorithm
+    const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-indexed
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month, day);
+  }
+
+  function substituteDay(date) {
+    // If Sat -> Mon, if Sun -> Mon, if both Xmas+Boxing fall on weekend -> Mon+Tue
+    const dow = date.getDay();
+    if (dow === 0) return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    if (dow === 6) return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2);
+    return date;
+  }
+
+  function getBankHolidays(year) {
+    const holidays = {};
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+    // New Year's Day
+    holidays[fmt(substituteDay(new Date(year, 0, 1)))] = "New Year's Day";
+
+    // Good Friday & Easter Monday
+    const easter = getEaster(year);
+    const goodFri = new Date(easter); goodFri.setDate(easter.getDate() - 2);
+    const easterMon = new Date(easter); easterMon.setDate(easter.getDate() + 1);
+    holidays[fmt(goodFri)] = 'Good Friday';
+    holidays[fmt(easterMon)] = 'Easter Monday';
+
+    // Early May — first Monday in May
+    for (let d = 1; d <= 7; d++) {
+      const dt = new Date(year, 4, d);
+      if (dt.getDay() === 1) { holidays[fmt(dt)] = 'Early May Bank Hol'; break; }
+    }
+
+    // Spring — last Monday in May
+    for (let d = 31; d >= 25; d--) {
+      const dt = new Date(year, 4, d);
+      if (dt.getDay() === 1) { holidays[fmt(dt)] = 'Spring Bank Hol'; break; }
+    }
+
+    // Summer — last Monday in August
+    for (let d = 31; d >= 25; d--) {
+      const dt = new Date(year, 7, d);
+      if (dt.getDay() === 1) { holidays[fmt(dt)] = 'Summer Bank Hol'; break; }
+    }
+
+    // Christmas & Boxing Day (handle weekend substitution together)
+    const xmas = new Date(year, 11, 25);
+    const boxing = new Date(year, 11, 26);
+    const xmasDow = xmas.getDay();
+    if (xmasDow === 0) {
+      // Sun 25, Mon 26 -> Tue 27 for Xmas sub, Mon 26 is Boxing
+      holidays[fmt(new Date(year, 11, 27))] = 'Christmas Day (sub)';
+      holidays[fmt(new Date(year, 11, 26))] = 'Boxing Day';
+    } else if (xmasDow === 5) {
+      // Fri 25, Sat 26 -> Fri 25 Xmas, Mon 28 Boxing sub
+      holidays[fmt(xmas)] = 'Christmas Day';
+      holidays[fmt(new Date(year, 11, 28))] = 'Boxing Day (sub)';
+    } else if (xmasDow === 6) {
+      // Sat 25, Sun 26 -> Mon 27 Xmas sub, Tue 28 Boxing sub
+      holidays[fmt(new Date(year, 11, 27))] = 'Christmas Day (sub)';
+      holidays[fmt(new Date(year, 11, 28))] = 'Boxing Day (sub)';
+    } else {
+      holidays[fmt(xmas)] = 'Christmas Day';
+      holidays[fmt(boxing)] = 'Boxing Day';
+    }
+
+    return holidays;
+  }
 
   // ── State ──
   const DOCTORS = ["SD","JF","LF","CH","RJ","DS","RS","CW","DW","FW","JWh","SW"];
@@ -672,11 +765,14 @@
       grid.appendChild(empty);
     }
 
+    const bankHols = getBankHolidays(calYear);
+
     for (let d = 1; d <= daysInMonth; d++) {
       const btn = document.createElement('button');
       const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       btn.className = 'cal-day';
       if (availability[dateStr]) btn.classList.add('available');
+      if (bankHols[dateStr]) btn.classList.add('bank-holiday');
       if (today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === d) {
         btn.classList.add('today');
       }
@@ -870,13 +966,17 @@
     }
 
     // Build table
+    const bankHols = getBankHolidays(planYear);
     let html = '<div class="planning-table-wrap"><table class="planning-table"><thead><tr><th>Doctor</th>';
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
     for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${planYear}-${String(planMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dow = new Date(planYear, planMonth, d).getDay();
       const isWeekend = dow === 0 || dow === 6;
-      html += `<th class="${isWeekend ? 'weekend-header' : ''}">${d}<br><small>${dayNames[dow]}</small></th>`;
+      const isBH = !!bankHols[dateStr];
+      const cls = isBH ? 'bank-hol-header' : (isWeekend ? 'weekend-header' : '');
+      html += `<th class="${cls}">${d}<br><small>${isBH ? 'BH' : dayNames[dow]}</small></th>`;
     }
     html += '</tr></thead><tbody>';
 
@@ -887,8 +987,10 @@
         const dateStr = `${planYear}-${String(planMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const dow = new Date(planYear, planMonth, d).getDay();
         const isWeekend = dow === 0 || dow === 6;
+        const isBH = !!bankHols[dateStr];
         const avail = allData[doc] && allData[doc][dateStr];
-        html += `<td class="${isWeekend ? 'weekend-col' : ''}">${avail ? '<span class="tick">&#10003;</span>' : ''}</td>`;
+        const cls = isBH ? 'bank-hol-col' : (isWeekend ? 'weekend-col' : '');
+        html += `<td class="${cls}">${avail ? '<span class="tick">&#10003;</span>' : ''}</td>`;
       }
       html += '</tr>';
     });
@@ -913,36 +1015,53 @@
   }
 
   // ── CSV Export ──
+  // Compact format: dates as rows, available doctor initials in columns
   window.exportCSV = () => {
     const { allData, daysInMonth, planYear, planMonth } = window._planData || {};
     if (!daysInMonth) return;
 
     const monthKey = `${planYear}-${String(planMonth + 1).padStart(2, '0')}`;
-    let csv = 'Doctor';
-    for (let d = 1; d <= daysInMonth; d++) csv += `,${d}`;
-    csv += ',Total\n';
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const bankHols = getBankHolidays(planYear);
 
-    DOCTORS.forEach(doc => {
-      csv += doc;
-      let total = 0;
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
-        const avail = allData[doc] && allData[doc][dateStr] ? 1 : 0;
-        total += avail;
-        csv += `,${avail ? 'Y' : ''}`;
-      }
-      csv += `,${total}\n`;
-    });
-
-    // Totals row
-    csv += 'Total';
+    // Find max number of doctors available on any single day (for column headers)
+    let maxAvail = 0;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
       let count = 0;
       DOCTORS.forEach(doc => { if (allData[doc] && allData[doc][dateStr]) count++; });
-      csv += `,${count}`;
+      if (count > maxAvail) maxAvail = count;
     }
+
+    // Header row
+    let csv = 'Date,Day,Notes,Count';
+    for (let i = 1; i <= maxAvail; i++) csv += `,Doctor ${i}`;
     csv += '\n';
+
+    // One row per day
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+      const dt = new Date(planYear, planMonth, d);
+      const dow = dt.getDay();
+      const dayName = dayNames[dow];
+      const isWeekend = dow === 0 || dow === 6;
+      const isBH = bankHols[dateStr];
+
+      // Notes column
+      const notes = [];
+      if (isBH) notes.push(isBH);
+      if (isWeekend) notes.push('Weekend');
+
+      // Collect available doctors
+      const available = [];
+      DOCTORS.forEach(doc => { if (allData[doc] && allData[doc][dateStr]) available.push(doc); });
+
+      csv += `${d} ${dayName},${dayName}`;
+      csv += `,"${notes.join('; ')}"`;
+      csv += `,${available.length}`;
+      available.forEach(doc => { csv += `,${doc}`; });
+      csv += '\n';
+    }
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
