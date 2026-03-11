@@ -242,6 +242,91 @@
   .cal-day.today { box-shadow: inset 0 0 0 2px var(--primary); }
   .cal-day:not(.empty):hover { transform: scale(1.05); }
 
+  /* Coverage overlay on calendar days */
+  .cal-day { position: relative; flex-direction: column; gap: 1px; }
+  .cal-day .cover-badge {
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 4px;
+    padding: 1px 4px;
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+  }
+  .cal-day .cover-badge.cover-zero { background: #fecaca; color: var(--danger); }
+  .cal-day .cover-badge.cover-one { background: #fef3c7; color: #92400e; }
+  .cal-day .cover-badge.cover-ok { background: #dcfce7; color: #166534; }
+  .cal-day.available .cover-badge.cover-ok { background: rgba(255,255,255,0.35); color: white; }
+  .cal-day.available .cover-badge.cover-zero { background: rgba(254,202,202,0.8); color: #7f1d1d; }
+  .cal-day.available .cover-badge.cover-one { background: rgba(254,243,199,0.8); color: #92400e; }
+
+  /* Coverage toggle */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    background: var(--card);
+    border-radius: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .toggle-row label { font-size: 14px; font-weight: 600; color: var(--text); }
+  .toggle-row small { font-size: 12px; color: var(--text-light); display: block; }
+  .toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+  /* Coverage summary panel */
+  .cover-summary {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .cover-summary .gap-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+  }
+  .cover-summary .gap-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
   /* Section Labels */
   .section-label {
     font-size: 14px;
@@ -418,6 +503,17 @@
       <span id="monthLabel"></span>
       <button onclick="changeMonth(1)">&#8594;</button>
     </div>
+    <div class="toggle-row">
+      <div>
+        <label>Show team cover</label>
+        <small>See how many others are available each day</small>
+      </div>
+      <div class="toggle-switch">
+        <input type="checkbox" id="coverToggle" onchange="toggleCoverage()">
+        <span class="toggle-slider"></span>
+      </div>
+    </div>
+    <div id="coverSummary" style="display:none"></div>
     <div class="quick-actions">
       <button class="quick-btn" onclick="setAllWeekdays()">All Weekdays</button>
       <button class="quick-btn" onclick="setAllDays()">All Days</button>
@@ -471,6 +567,8 @@
   let calYear, calMonth; // 0-indexed month
   let planYear, planMonth;
   let availability = {}; // { "YYYY-MM-DD": true, ... } for current doctor
+  let showCoverage = false;
+  let coverageData = {}; // { "YYYY-MM-DD": count } — others available (excluding current doctor)
 
   // ── Navigation ──
   function showView(id, title, showBack) {
@@ -597,6 +695,7 @@
       btn.classList.add('available');
     }
     updateStatusCount();
+    if (showCoverage) renderCoverageBadges();
     await saveDoctorData();
   }
 
@@ -605,13 +704,102 @@
     document.getElementById('statusBar').textContent = `${currentDoctor}: ${count} day${count !== 1 ? 's' : ''} marked available`;
   }
 
+  // ── Coverage ──
+  async function loadCoverageData() {
+    coverageData = {};
+    const monthKey = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+    try {
+      const snap = await getDocs(collection(db, 'availability'));
+      snap.forEach(d => {
+        const data = d.data();
+        if (d.id.endsWith(monthKey) && data.doctor !== currentDoctor) {
+          const dates = data.dates || {};
+          for (const dateStr in dates) {
+            if (dates[dateStr]) {
+              coverageData[dateStr] = (coverageData[dateStr] || 0) + 1;
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.error('Coverage load error:', e);
+    }
+  }
+
+  function renderCoverageBadges() {
+    if (!showCoverage) {
+      document.querySelectorAll('.cover-badge').forEach(b => b.remove());
+      document.getElementById('coverSummary').style.display = 'none';
+      return;
+    }
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const monthKey = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+
+    // Add badges to existing day buttons
+    document.querySelectorAll('.cal-day:not(.empty)').forEach(btn => {
+      const day = parseInt(btn.textContent);
+      const dateStr = `${monthKey}-${String(day).padStart(2, '0')}`;
+      const othersCount = coverageData[dateStr] || 0;
+      // Total = others + current doctor if they're available
+      const total = othersCount + (availability[dateStr] ? 1 : 0);
+
+      // Remove existing badge
+      const existing = btn.querySelector('.cover-badge');
+      if (existing) existing.remove();
+
+      const badge = document.createElement('span');
+      badge.className = 'cover-badge';
+      if (total === 0) badge.classList.add('cover-zero');
+      else if (total === 1) badge.classList.add('cover-one');
+      else badge.classList.add('cover-ok');
+      badge.textContent = total;
+      btn.appendChild(badge);
+    });
+
+    // Summary panel
+    let zeroCount = 0, oneCount = 0;
+    const zeroDays = [], oneDays = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+      const total = (coverageData[dateStr] || 0) + (availability[dateStr] ? 1 : 0);
+      if (total === 0) { zeroCount++; zeroDays.push(d); }
+      else if (total === 1) { oneCount++; oneDays.push(d); }
+    }
+
+    const panel = document.getElementById('coverSummary');
+    if (zeroCount === 0 && oneCount === 0) {
+      panel.innerHTML = '<div class="cover-summary" style="color:var(--success);font-weight:600">All days have 2+ doctors covered</div>';
+    } else {
+      let html = '<div class="cover-summary">';
+      if (zeroCount > 0) {
+        html += `<div style="margin-bottom:4px"><span class="gap-item"><span class="gap-dot" style="background:var(--danger)"></span><strong>${zeroCount} day${zeroCount > 1 ? 's' : ''} uncovered:</strong></span> ${zeroDays.join(', ')}</div>`;
+      }
+      if (oneCount > 0) {
+        html += `<div><span class="gap-item"><span class="gap-dot" style="background:var(--warning)"></span><strong>${oneCount} day${oneCount > 1 ? 's' : ''} with only 1:</strong></span> ${oneDays.join(', ')}</div>`;
+      }
+      html += '</div>';
+      panel.innerHTML = html;
+    }
+    panel.style.display = '';
+  }
+
+  window.toggleCoverage = async () => {
+    showCoverage = document.getElementById('coverToggle').checked;
+    if (showCoverage) {
+      await loadCoverageData();
+    }
+    renderCoverageBadges();
+  };
+
   // ── Month Nav ──
   window.changeMonth = async (dir) => {
     calMonth += dir;
     if (calMonth < 0) { calMonth = 11; calYear--; }
     if (calMonth > 11) { calMonth = 0; calYear++; }
     await loadDoctorData();
+    if (showCoverage) await loadCoverageData();
     renderCalendar();
+    if (showCoverage) renderCoverageBadges();
   };
 
   window.changePlanMonth = async (dir) => {
@@ -634,6 +822,7 @@
     }
     await saveDoctorData();
     renderCalendar();
+    if (showCoverage) renderCoverageBadges();
   };
 
   window.setAllDays = async () => {
@@ -645,12 +834,14 @@
     }
     await saveDoctorData();
     renderCalendar();
+    if (showCoverage) renderCoverageBadges();
   };
 
   window.clearAll = async () => {
     availability = {};
     await saveDoctorData();
     renderCalendar();
+    if (showCoverage) renderCoverageBadges();
   };
 
   // ── Planning View ──
