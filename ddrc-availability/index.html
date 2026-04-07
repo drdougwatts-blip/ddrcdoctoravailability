@@ -476,6 +476,77 @@
     height: 16px;
     border-radius: 4px;
   }
+
+  /* No availability checkbox row */
+  .no-avail-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    background: var(--card);
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    cursor: pointer;
+  }
+  .no-avail-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--danger);
+    flex-shrink: 0;
+  }
+  .no-avail-row span { font-size: 14px; font-weight: 500; }
+  .no-avail-row.checked {
+    background: #fef2f2;
+    border: 2px solid #fca5a5;
+  }
+
+  /* Response tracker in planning view */
+  .response-panel {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .response-panel h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .response-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .response-chip {
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .response-chip.responded { background: #dcfce7; color: #166534; }
+  .response-chip.not-avail { background: #fef2f2; color: var(--danger); }
+  .response-chip.no-response { background: #fee2e2; color: #991b1b; }
+  .reminder-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--warning);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .reminder-btn:hover { background: #d97706; }
 </style>
 </head>
 <body>
@@ -528,13 +599,19 @@
       </label>
     </div>
     <div id="coverSummary" style="display:none"></div>
-    <div class="quick-actions">
-      <button class="quick-btn" onclick="setAllWeekdays()">All Weekdays</button>
-      <button class="quick-btn" onclick="setAllDays()">All Days</button>
-      <button class="quick-btn danger" onclick="clearAll()">Clear All</button>
+    <label class="no-avail-row" id="noAvailRow">
+      <input type="checkbox" id="noAvailCheck" onchange="toggleNoAvailability()">
+      <span>I have no availability this month</span>
+    </label>
+    <div id="calControls">
+      <div class="quick-actions">
+        <button class="quick-btn" onclick="setAllWeekdays()">All Weekdays</button>
+        <button class="quick-btn" onclick="setAllDays()">All Days</button>
+        <button class="quick-btn danger" onclick="clearAll()">Clear All</button>
+      </div>
+      <div class="cal-header" id="calHeader"></div>
+      <div class="cal-grid" id="calGrid"></div>
     </div>
-    <div class="cal-header" id="calHeader"></div>
-    <div class="cal-grid" id="calGrid"></div>
   </div>
 </div>
 
@@ -552,6 +629,7 @@
       <div class="legend-item"><div class="legend-swatch" style="background:#fecaca;border:1px solid #fca5a5"></div> 0 doctors</div>
       <div class="legend-item"><div class="legend-swatch" style="background:#ede9fe;border:1px solid #c4b5fd"></div> Bank holiday</div>
     </div>
+    <div id="responsePanel" class="response-panel" style="display:none"></div>
     <div id="planningContent"><div class="loading"><div class="spinner"></div>Loading data...</div></div>
     <button class="export-btn" onclick="exportCSV()">&#128190; Export CSV</button>
   </div>
@@ -660,6 +738,7 @@
   let calYear, calMonth; // 0-indexed month
   let planYear, planMonth;
   let availability = {}; // { "YYYY-MM-DD": true, ... } for current doctor
+  let noAvailability = false; // true if doctor explicitly marked "no availability this month"
   let showCoverage = false;
   let coverageData = {}; // { "YYYY-MM-DD": count } — others available (excluding current doctor)
 
@@ -719,17 +798,25 @@
     try {
       const ref = docRef(currentDoctor, calYear, calMonth);
       const snap = await getDoc(ref);
-      availability = snap.exists() ? snap.data().dates || {} : {};
+      if (snap.exists()) {
+        const data = snap.data();
+        availability = data.dates || {};
+        noAvailability = data.noAvailability || false;
+      } else {
+        availability = {};
+        noAvailability = false;
+      }
     } catch (e) {
       console.error('Load error:', e);
       availability = {};
+      noAvailability = false;
     }
   }
 
   async function saveDoctorData() {
     try {
       const ref = docRef(currentDoctor, calYear, calMonth);
-      await setDoc(ref, { doctor: currentDoctor, year: calYear, month: calMonth, dates: availability });
+      await setDoc(ref, { doctor: currentDoctor, year: calYear, month: calMonth, dates: availability, noAvailability });
     } catch (e) {
       console.error('Save error:', e);
     }
@@ -745,9 +832,25 @@
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     label.textContent = `${monthNames[calMonth]} ${calYear}`;
 
+    // Update no-availability checkbox
+    const noAvailCheck = document.getElementById('noAvailCheck');
+    const noAvailRow = document.getElementById('noAvailRow');
+    const calControls = document.getElementById('calControls');
+    noAvailCheck.checked = noAvailability;
+    noAvailRow.classList.toggle('checked', noAvailability);
+    calControls.style.display = noAvailability ? 'none' : '';
+
     const statusBar = document.getElementById('statusBar');
-    const count = Object.values(availability).filter(Boolean).length;
-    statusBar.textContent = `${currentDoctor}: ${count} day${count !== 1 ? 's' : ''} marked available`;
+    if (noAvailability) {
+      statusBar.textContent = `${currentDoctor}: Not available this month`;
+      statusBar.style.background = '#fef2f2';
+      statusBar.style.color = 'var(--danger)';
+    } else {
+      const count = Object.values(availability).filter(Boolean).length;
+      statusBar.textContent = `${currentDoctor}: ${count} day${count !== 1 ? 's' : ''} marked available`;
+      statusBar.style.background = '#dbeafe';
+      statusBar.style.color = 'var(--primary-dark)';
+    }
 
     const grid = document.getElementById('calGrid');
     grid.innerHTML = '';
@@ -887,6 +990,40 @@
     renderCoverageBadges();
   };
 
+  // ── No Availability ──
+  window.toggleNoAvailability = async () => {
+    noAvailability = document.getElementById('noAvailCheck').checked;
+    if (noAvailability) {
+      availability = {};
+    }
+    await saveDoctorData();
+    renderCalendar();
+    if (showCoverage) renderCoverageBadges();
+  };
+
+  // ── Email Reminders ──
+  window.sendReminders = () => {
+    const { noResponseDocs } = window._responseData || {};
+    if (!noResponseDocs || noResponseDocs.length === 0) return;
+
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = `${monthNames[planMonth]} ${planYear}`;
+    const subject = encodeURIComponent(`DDRC Availability - Please submit for ${monthName}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nThis is a reminder to please submit your availability for ${monthName}.\n\n` +
+      `You can do so here:\nhttps://drdougwatts-blip.github.io/ddrcdoctoravailability/\n\n` +
+      `If you have no availability this month, please tick the "I have no availability this month" checkbox so we know you've seen this.\n\n` +
+      `Thanks`
+    );
+
+    // Open mailto with BCC to all non-responders' initials
+    // Since we don't have email addresses, show the list and open a compose
+    const names = noResponseDocs.join(', ');
+    const mailto = `mailto:?subject=${subject}&body=${body}`;
+    window.open(mailto, '_blank');
+    alert('Please add email addresses for: ' + names);
+  };
+
   // ── Month Nav ──
   window.changeMonth = async (dir) => {
     calMonth += dir;
@@ -953,8 +1090,9 @@
 
     // Load all doctor data for this month
     const allData = {};
+    let snap = null;
     try {
-      const snap = await getDocs(collection(db, 'availability'));
+      snap = await getDocs(collection(db, 'availability'));
       snap.forEach(d => {
         const data = d.data();
         if (d.id.endsWith(monthKey)) {
@@ -1012,6 +1150,76 @@
 
     // Store for CSV export
     window._planData = { allData, daysInMonth, planYear, planMonth };
+
+    // Response tracker
+    renderResponsePanel(allData, snap);
+  }
+
+  function renderResponsePanel(allData, snap) {
+    // Categorise doctors: responded (has dates), no-availability (flagged), no response
+    const responded = [];
+    const notAvail = [];
+    const noResponse = [];
+
+    // Build lookup of raw doc data
+    const rawData = {};
+    if (snap) {
+      snap.forEach(d => {
+        const data = d.data();
+        const monthKey = `${planYear}-${String(planMonth + 1).padStart(2, '0')}`;
+        if (d.id.endsWith(monthKey)) {
+          rawData[data.doctor] = data;
+        }
+      });
+    }
+
+    DOCTORS.forEach(doc => {
+      const data = rawData[doc];
+      if (!data) {
+        noResponse.push(doc);
+      } else if (data.noAvailability) {
+        notAvail.push(doc);
+      } else {
+        const dates = data.dates || {};
+        const hasAny = Object.values(dates).some(Boolean);
+        if (hasAny) {
+          responded.push(doc);
+        } else {
+          noResponse.push(doc);
+        }
+      }
+    });
+
+    const panel = document.getElementById('responsePanel');
+    let html = '<h3>Response Status</h3>';
+
+    if (responded.length > 0) {
+      html += '<div style="margin-bottom:6px;font-size:12px;color:var(--text-light)">Submitted availability</div>';
+      html += '<div class="response-chips">';
+      responded.forEach(d => { html += `<span class="response-chip responded">${d}</span>`; });
+      html += '</div>';
+    }
+
+    if (notAvail.length > 0) {
+      html += '<div style="margin-bottom:6px;font-size:12px;color:var(--text-light)">No availability this month</div>';
+      html += '<div class="response-chips">';
+      notAvail.forEach(d => { html += `<span class="response-chip not-avail">${d}</span>`; });
+      html += '</div>';
+    }
+
+    if (noResponse.length > 0) {
+      html += '<div style="margin-bottom:6px;font-size:12px;color:var(--text-light)">Not yet responded</div>';
+      html += '<div class="response-chips">';
+      noResponse.forEach(d => { html += `<span class="response-chip no-response">${d}</span>`; });
+      html += '</div>';
+      html += `<button class="reminder-btn" onclick="sendReminders()">&#9993; Send reminder email (${noResponse.length})</button>`;
+    }
+
+    panel.innerHTML = html;
+    panel.style.display = '';
+
+    // Store for reminder function
+    window._responseData = { noResponseDocs: noResponse };
   }
 
   // ── CSV Export ──
